@@ -1,0 +1,117 @@
+---
+# Two plays, both executed from the Ansible controller:
+#   Play 1: controller -> each VM        gather facts (VMs never talk to each other)
+#   Play 2: controller -> wiki VM        write one page per VM + index page
+# Play 2 starts only after play 1 has finished for all VMs. No delegate_to is used.
+#
+# Usage:
+#   ansible-playbook -i inventory playbook.yml -e vm_group=vms -e wiki_host=host_Z
+
+- name: Gather facts from VMs
+  hosts: "<your host(s)/host group(s)"
+  gather_facts: true
+  become: false
+
+  tasks:
+
+    - name: Read kernel boot time (epoch, fixed until reboot)
+      ansible.builtin.command: awk '/^btime/ {print $2}' /proc/stat
+      register: dw_btime_raw
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Determine page name (FQDN, lowercase as DokuWiki requires)
+      ansible.builtin.set_fact:
+        dw_fqdn: >-
+          {{ (ansible_facts['fqdn']
+              if ('.' in ansible_facts['fqdn'] and not ansible_facts['fqdn'].startswith('localhost'))
+              else inventory_hostname) | lower }}
+        dw_boot_epoch: "{{ dw_btime_raw.stdout | default('') }}"
+   
+    - name: Gather service facts
+      ansible.builtin.service_facts: 
+
+- name: Write DokuWiki pages on the wiki VM
+  hosts: "<your dokuwiki server>"   # required: inventory name of the wiki VM
+  gather_facts: false
+  become: true
+
+  vars:
+    vm_group: vms                        # must match play 1 (override both with -e vm_group=...)
+    dokuwiki_pages: <your local data path to: > # DokuWiki data/pages directory on the wiki VM
+    dokuwiki_uid: "48"                   # file owner as seen on the wiki VM
+    dokuwiki_gid: "48"
+    # dokuwiki_setype: container_file_t  # set after checking `ls -Z`; omitted when undefined
+
+    dw_vm_ns: vm               # directory for the per-VM pages
+    dw_index_page: live   # index page (without .txt)
+    dw_vm_id: "{{ dw_vm_ns | replace('/', ':') }}"
+    dw_index_id: "{{ dw_index_page | replace('/', ':') }}"
+    dw_service_patterns: ['agent', 'httpd', 'nginx', 'splunk', 'falcon', 'node_exporter', 'postgres', 'mariadb']
+
+    # VMs whose fact gathering succeeded in play 1 (unreachable/failed VMs have no dw_fqdn)
+    vm_hosts: >-
+      {{ groups['all'] | map('extract', hostvars)
+         | selectattr('dw_fqdn', 'defined')
+         | map(attribute='inventory_hostname') | list }}
+  tasks:
+
+    - name: Query latest kernel package
+      tags: asset_only
+      theforeman.foreman.resource_info:
+        server_url: "{{ foreman_url }}"
+        username: "{{ foreman_admin_user }}"
+        password: "{{ foreman_admin_password }}"
+        organization: "{{ foreman_organization }}"
+        validate_certs: "{{ foreman_validate_certs }}"
+        resource: packages
+        search: "name = kernel"
+        params:
+          repository_id: "{{ item.id }}"
+          packages_restrict_latest: true
+      loop: "{{ foreman_repos }}"
+      loop_control:
+        label: "{{ item.label }}"
+      register: kernel
+
+    - name: Build kernel report
+      tags: asset_only
+      ansible.builtin.set_fact:
+        kernel_report: |-
+          {% for r in kernel.results %}
+          Latest {{ r.item.label }} Kernel release available: {{ (r.resources | first).nvra | default('none') }}
+          {% endfor %}
+
+    - name: Ensure VM namespace directory exists
+      ansible.builtin.file:
+        path: "{{ dokuwiki_pages }}/{{ dw_vm_ns }}"
+        state: directory
+        owner: "{{ dokuwiki_uid }}"
+        group: "{{ dokuwiki_gid }}"
+        mode: "0755"
+        setype: "{{ dokuwiki_setype | default(omit) }}"
+
+    - name: Write one page per VM
+      ansible.builtin.template:
+        src: "files/dokuwiki/vm_page.txt.j2"
+        dest: "{{ dokuwiki_pages }}/{{ dw_vm_ns }}/{{ hostvars[vm_host].dw_fqdn }}.txt"
+        owner: "{{ dokuwiki_uid }}"
+        group: "{{ dokuwiki_gid }}"
+        mode: "0644"
+        setype: "{{ dokuwiki_setype | default(omit) }}"
+      loop: "{{ vm_hosts }}"
+      loop_control:
+        loop_var: vm_host
+        label: "{{ hostvars[vm_host].dw_fqdn }}"
+
+    - name: Write index page linking to all VMs
+      tags: asset_only
+      ansible.builtin.template:
+        src: "files/dokuwiki/assets_live.txt.j2"
+        dest: "{{ dokuwiki_pages }}/{{ dw_index_page }}.txt"
+        owner: "{{ dokuwiki_uid }}"
+        group: "{{ dokuwiki_gid }}"
+        mode: "0644"
+        setype: "{{ dokuwiki_setype | default(omit) }}"
+
