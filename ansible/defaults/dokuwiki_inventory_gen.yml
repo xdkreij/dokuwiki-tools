@@ -1,0 +1,25 @@
+---
+
+foreman_url: <your foreman/satellite fqdn>
+foreman_admin_user: <foreman username>
+foreman_admin_password: <foreman vault encrypted password>
+foreman_organization: dummy.org.
+foreman_validate_certs: True / False
+
+# --- Defaults set in play 2 vars: override when your wiki differs ---
+dokuwiki_pages: /data/wiki-linux/data/pages  # Absolute path to DokuWiki's data/pages directory on wiki_host
+dokuwiki_uid: "48"                      # Numeric owner of the written files and directories (UID 48 = apache)
+dokuwiki_gid: "48"                      # Numeric group of the written files and directories
+dokuwiki_vm_ns: vm                  # Folder under dokuwiki_pages for the per-VM <fqdn>.txt pages
+dokuwiki_index_page: live           # Index page path under dokuwiki_pages, without .txt
+dokuwiki_service_patterns: ['agent', 'httpd', 'nginx', 'splunk', 'falcon', 'node_exporter', 'postgres', 'mariadb'] # List 'of to be Matched against running services' on the system
+dokuwiki_vm_id: "{{ dokuwiki_vm_ns | replace('/', ':') }}"
+dokuwiki_index_id: "{{ dokuwiki_index_page | replace('/', ':') }}"
+
+# --- Optional: if undefined, the feature is off or the template default is used ---
+dokuwiki_setype: container_file_t       # SELinux type for the written files; left out (omit) when undefined
+dokuwiki_app_owners:                    # FQDN substring -> role/owner for the Role and Owner columns on the live page
+  t01: {role: Test Environment, owner: Me}
+dokuwiki_lce_envs:                            # Ordered {title, regex} list for the LCE tables; default Test/Acceptance/Management/Production
+  - {title: 'LCE: Test', regex: '(^|[.-])t-'}
+dokuwiki_service_patterns: [agent, httpd, nginx, splunk]  # Regex list of service names shown under "Application services" on VM pages
