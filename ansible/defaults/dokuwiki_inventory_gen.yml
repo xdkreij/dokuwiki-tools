@@ -21,8 +21,7 @@ dokuwiki_index_id: "{{ dokuwiki_index_page | replace('/', ':') }}"
 
 # --- Optional: if undefined, the feature is off or the template default is used ---
 dokuwiki_setype: container_file_t       # SELinux type for the written files; left out (omit) when undefined
-dokuwiki_app_owners:                    # FQDN substring -> role/owner for the Role and Owner columns on the live page
-  t01: {role: Test Environment, owner: Me}
+#dokuwiki_app_owners:                    # FQDN substring -> role/owner for the Role and Owner columns on the live page
+#  t01: {role: Test Environment, owner: Me}  # for defaults, check assets_live.txt.j2 
 dokuwiki_lce_envs:                            # Ordered {title, regex} list for the LCE tables; default Test/Acceptance/Management/Production
   - {title: 'LCE: Test', regex: '(^|[.-])t-'}
-dokuwiki_service_patterns: [agent, httpd, nginx, splunk]  # Regex list of service names shown under "Application services" on VM pages
