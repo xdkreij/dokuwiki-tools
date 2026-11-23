@@ -5,6 +5,9 @@ foreman_admin_user: <foreman username>
 foreman_admin_password: <foreman vault encrypted password>
 foreman_organization: dummy.org.
 foreman_validate_certs: True / False
+foreman_repos:
+  - { id: 9000, label: "RHEL 8" }    # <--- change the repo id to where your RHEL8 REPO lives
+  - { id: 9001, label: "RHEL 9" }    # <--- change the repo id to where your RHEL 9 REPO lives
 
 # --- Defaults set in play 2 vars: override when your wiki differs ---
 dokuwiki_pages: /data/wiki-linux/data/pages  # Absolute path to DokuWiki's data/pages directory on wiki_host
