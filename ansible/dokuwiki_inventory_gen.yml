@@ -7,21 +7,21 @@
 # Usage:
 #   ansible-playbook -i inventory playbook.yml -e vm_group=vms -e wiki_host=host_Z
 
-- name: Gather facts from VMs
+- name: 'Gather facts from VMs'
   hosts: "<your host(s)/host group(s)"
   gather_facts: true
   become: false
 
   tasks:
 
-    - name: Read kernel boot time (epoch, fixed until reboot)
+    - name: 'Read kernel boot time (epoch, fixed until reboot)'
       ansible.builtin.command: awk '/^btime/ {print $2}' /proc/stat
       register: dokuwiki_btime_raw
       changed_when: false
       failed_when: false
       check_mode: false
 
-    - name: Determine page name (FQDN, lowercase as DokuWiki requires)
+    - name: 'Determine page name (FQDN, lowercase as DokuWiki requires)'
       ansible.builtin.set_fact:
         dokuwiki_page_name: >-
           {{ (ansible_facts['fqdn']
@@ -29,10 +29,10 @@
               else inventory_hostname) | lower }}
         dw_boot_epoch: "{{ dokuwiki_btime_raw.stdout | default('') }}"
    
-    - name: Gather service facts
+    - name: 'Gather service facts'
       ansible.builtin.service_facts: 
 
-- name: Write DokuWiki pages on the wiki VM
+- name: 'Write DokuWiki pages on the wiki VM'
   hosts: "<your dokuwiki server>"   # required: inventory name of the wiki VM
   gather_facts: false
   become: true
@@ -44,7 +44,7 @@
          | map(attribute='inventory_hostname') | list }}
   tasks:
 
-    - name: Query latest kernel package
+    - name: 'Query latest kernel package'
       theforeman.foreman.resource_info:
         server_url: "{{ foreman_url }}"
         username: "{{ foreman_admin_user }}"
@@ -61,14 +61,14 @@
         label: "{{ item.label }}"
       register: kernel
 
-    - name: Build kernel report
+    - name: 'Build kernel report'
       ansible.builtin.set_fact:
         kernel_report: |-
           {% for r in kernel.results %}
           Latest {{ r.item.label }} Kernel release available: {{ (r.resources | first).nvra | default('none') }}
           {% endfor %}
 
-    - name: Ensure VM namespace directory exists
+    - name: 'Ensure VM namespace directory exists'
       ansible.builtin.file:
         path: "{{ dokuwiki_pages }}/{{ dokuwiki_vm_ns }}"
         state: directory
@@ -77,7 +77,7 @@
         mode: "0755"
         setype: "{{ dokuwiki_setype | default(omit) }}"
 
-    - name: Write one page per VM
+    - name: 'Write one page per VM'
       ansible.builtin.template:
         src: "files/dokuwiki/vm_page.txt.j2"
         dest: "{{ dokuwiki_pages }}/{{ dokuwiki_vm_ns }}/{{ hostvars[vm_host].dokuwiki_page_name }}.txt"
@@ -90,7 +90,7 @@
         loop_var: vm_host
         label: "{{ hostvars[vm_host].dokuwiki_page_name }}"
 
-    - name: Write index page linking to all VMs
+    - name: 'Write index page linking to all VMs'
       ansible.builtin.template:
         src: "files/dokuwiki/assets_live.txt.j2"
         dest: "{{ dokuwiki_pages }}/{{ dokuwiki_index_page }}.txt"
@@ -98,4 +98,3 @@
         group: "{{ dokuwiki_gid }}"
         mode: "0644"
         setype: "{{ dokuwiki_setype | default(omit) }}"
-
